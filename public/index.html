@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor Confeitaria Inteligente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script>
+      // Configuração do Firebase
+      const firebaseConfig = {
+        apiKey: "AIzaSyBqMKfIFQYW4IizepzHzXMXioKk2D2uVEI",
+        authDomain: "gestor-confeitaria-ia.firebaseapp.com",
+        projectId: "gestor-confeitaria-ia",
+        storageBucket: "gestor-confeitaria-ia.appspot.com",
+        messagingSenderId: "680331013226",
+        appId: "1:680331013226:web:xxxxxx"
+      };
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chat-container::-webkit-scrollbar, .scroll-container::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-thumb, .scroll-container::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 3px; }
+        .nav-link.active { background-color: #374151; font-weight: 600; }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.6); }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        #google-auth-btn { transition: all 0.3s; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.5s, bottom 0.5s;
+        }
+        .toast.show {
+            opacity: 1;
+            bottom: 40px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div id="app" class="flex flex-col md:flex-row h-screen">
+        <!-- Barra de Navegação Lateral -->
+        <nav class="hidden md:flex flex-col w-64 bg-gray-800 text-white p-4 space-y-2">
+            <div class="text-2xl font-bold mb-4">Gestor IA</div>
+            <div id="auth-container-desktop" class="mb-4">
+                <button id="google-auth-btn" class="w-full bg-white text-gray-700 font-semibold py-2 px-4 rounded-lg flex items-center justify-center hover:bg-gray-200">
+                    <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" class="w-5 h-5 mr-2">
+                    <span id="auth-status-text">Conectar com Google</span>
+                </button>
+            </div>
+        </nav>
+        <!-- Conteúdo Principal -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <header class="md:hidden bg-gray-800 text-white p-4 flex justify-between items-center shadow-lg">
+                <div class="text-xl font-bold">Gestor IA</div>
+                <button id="menu-button" class="text-2xl"><i class="fas fa-bars"></i></button>
+            </header>
+            <div id="mobile-menu" class="hidden md:hidden bg-gray-800 text-white p-2">
+                 <div id="auth-container-mobile" class="p-2">
+                    <button id="google-auth-btn-mobile" class="w-full bg-white text-gray-700 font-semibold py-2 px-4 rounded-lg flex items-center justify-center hover:bg-gray-200">
+                         <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" class="w-5 h-5 mr-2">
+                         <span id="auth-status-text-mobile">Conectar com Google</span>
+                    </button>
+                 </div>
+            </div>
+            <div id="page-container" class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto scroll-container"></div>
+        </main>
+    </div>
+    <div id="modal-container"></div>
+    <div id="toast" class="toast"></div>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script>
+        // --- PWA: Service Worker Registration ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful');
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            let currentUser;
+            // --- GOOGLE API CONFIG ---
+            const API_KEY = 'AIzaSyBqMKfIFQYW4IizepzHzXMXioKk2D2uVEI';
+            const CLIENT_ID = '680331013226-uoj6srudes645bc7731vcmap599pato5.apps.googleusercontent.com';
+            const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"];
+            const SCOPES = "https://www.googleapis.com/auth/calendar.events";
+            let gapiAuth2;
+            // --- Seletores ---
+            const authBtnDesktop = document.getElementById('google-auth-btn');
+            const authBtnMobile = document.getElementById('google-auth-btn-mobile');
+            const authStatusTextDesktop = document.getElementById('auth-status-text');
+            const authStatusTextMobile = document.getElementById('auth-status-text-mobile');
+            const pageContainer = document.getElementById('page-container');
+            const modalContainer = document.getElementById('modal-container');
+            const navDesktop = document.querySelector('nav');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const menuButton = document.getElementById('menu-button');
+            // --- Estrutura de Navegação e Páginas ---
+            const navItems = [
+                { page: 'dashboard', icon: 'fa-chart-pie', label: 'Dashboard' },
+                { page: 'pedidos', icon: 'fa-calendar-alt', label: 'Pedidos & Agenda' },
+                { page: 'clientes', icon: 'fa-users', label: 'Clientes' },
+                { page: 'producao', icon: 'fa-blender', label: 'Produção' },
+                { page: 'receitas', icon: 'fa-book-open', label: 'Receitas' },
+                { page: 'produtos', icon: 'fa-cookie-bite', label: 'Produtos' },
+                { page: 'estoque', icon: 'fa-boxes', label: 'Estoque' },
+                { page: 'analise', icon: 'fa-search-dollar', label: 'Análise' },
+                { page: 'chat', icon: 'fa-comments', label: 'Assistente IA', isPrimary: true },
+            ];
+            const pages = {
+                login: `
+                    <div class="flex flex-col items-center justify-center h-full">
+                        <h1 class="text-3xl font-bold mb-6">Bem-vindo ao Gestor Confeitaria IA</h1>
+                        <p class="mb-6 text-lg text-gray-700">Faça login para acessar o sistema</p>
+                        <button id="google-auth-btn-login" class="bg-white text-gray-700 font-semibold py-2 px-4 rounded-lg flex items-center justify-center shadow hover:bg-gray-200">
+                            <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" class="w-5 h-5 mr-2">
+                            <span>Entrar com Google</span>
+                        </button>
+                    </div>`,
+                dashboard: `
+                    <h1 class="text-3xl font-bold mb-6">Dashboard</h1>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-md"><h2 class="text-lg font-semibold text-gray-600">Faturamento (Mês)</h2><p class="text-3xl font-bold mt-2">R$ 7.850,00</p><p class="text-sm text-green-500 mt-1">+5.2%</p></div>
+                        <div class="bg-white p-6 rounded-xl shadow-md"><h2 class="text-lg font-semibold text-gray-600">Lucro Líquido (Mês)</h2><p class="text-3xl font-bold mt-2">R$ 3.120,00</p><p class="text-sm text-red-500 mt-1">-1.8%</p></div>
+                        <div class="bg-blue-100 border border-blue-200 p-6 rounded-xl shadow-md"><h2 class="text-lg font-semibold text-blue-700">Agenda do Dia</h2><p class="text-3xl font-bold text-blue-800 mt-2">3 Entregas</p><p class="text-sm text-blue-600 mt-1">2 Orçamentos pendentes</p></div>
+                        <div class="bg-red-100 border border-red-200 p-6 rounded-xl shadow-md"><h2 class="text-lg font-semibold text-red-700">Alertas de Estoque</h2><p class="text-3xl font-bold text-red-800 mt-2">2 Itens Baixos</p><p class="text-sm text-red-600 mt-1">Farinha e Leite Condensado</p></div>
+                    </div>`,
+                pedidos: `
+                    <div class="flex justify-between items-center mb-6"><h1 class="text-3xl font-bold">Pedidos & Agenda</h1><button id="add-order-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg flex items-center"><i class="fas fa-plus mr-2"></i> Novo Pedido/Orçamento</button></div>
+                    <div class="bg-white p-6 rounded-xl shadow-md overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b"><th class="p-4">Cliente</th><th class="p-4">Entrega</th><th class="p-4">Valor</th><th class="p-4">Status</th></tr></thead><tbody><tr class="border-b hover:bg-gray-50"><td class="p-4 font-medium">Juliana Martins</td><td class="p-4">02/08/2025</td><td class="p-4">R$ 450,00</td><td class="p-4"><span class="flex items-center"><span class="status-dot bg-green-500"></span>Confirmado</span></td></tr><tr class="border-b hover:bg-gray-50"><td class="p-4 font-medium">Empresa Festas SA</td><td class="p-4">05/08/2025</td><td class="p-4">R$ 1.200,00</td><td class="p-4"><span class="flex items-center"><span class="status-dot bg-yellow-500"></span>Orçamento</span></td></tr></tbody></table></div>`,
+                clientes: `
+                    <div class="flex justify-between items-center mb-6"><h1 class="text-3xl font-bold">Clientes</h1><button class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg flex items-center"><i class="fas fa-user-plus mr-2"></i> Novo Cliente</button></div>
+                    <div class="bg-white p-6 rounded-xl shadow-md overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b"><th class="p-4">Nome</th><th class="p-4">Contacto</th><th class="p-4">Último Pedido</th></tr></thead><tbody><tr class="border-b hover:bg-gray-50"><td class="p-4 font-medium">Juliana Martins</td><td class="p-4">(11) 99876-5432</td><td class="p-4">02/08/2025</td></tr></tbody></table></div>`,
+                chat: `
+                    <div class="flex flex-col h-full">
+                        <div id="chat-container" class="chat-container flex-1 overflow-y-auto bg-white p-4 rounded-xl shadow-md">
+                            <div class="flex mb-4"><div class="bg-blue-500 text-white rounded-lg p-3 max-w-xs"><p>Olá! Sou o seu assistente de gestão. Como posso ajudar hoje?</p></div></div>
+                        </div>
+                        <div class="mt-4 bg-white p-4 rounded-xl shadow-md"><div class="flex items-center"><input type="text" id="chat-input" placeholder="Digite a sua mensagem ou anexe um ficheiro..." class="w-full px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"><label for="file-upload" class="ml-3 cursor-pointer text-gray-500 hover:text-blue-600"><i class="fas fa-paperclip text-2xl"></i><input id="file-upload" type="file" class="hidden"></label><button id="chat-send" class="ml-3 bg-blue-600 text-white px-5 py-2 rounded-full hover:bg-blue-700 focus:outline-none"><i class="fas fa-paper-plane"></i></button></div></div>
+                    </div>`
+            };
+            function renderPage(pageId) {
+                pageContainer.innerHTML = pages[pageId] || `<h1 class="text-3xl font-bold">Página ${pageId} em construção</h1>`;
+                // Adiciona evento de login Google na página de login
+                if (pageId === 'login') {
+                    const loginBtn = document.getElementById('google-auth-btn-login');
+                    if (loginBtn) {
+                        loginBtn.addEventListener('click', () => {
+                            const provider = new firebase.auth.GoogleAuthProvider();
+                            firebase.auth().signInWithPopup(provider).then(() => {
+                                document.dispatchEvent(new Event('userLoggedIn'));
+                            });
+                        });
+                    }
+                }
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.toggle('active', l.dataset.page === pageId));
+                if (!mobileMenu.classList.contains('hidden')) {
+                    mobileMenu.classList.add('hidden');
+                }
+                // Adicionar event listeners para elementos da nova página
+                if (pageId === 'pedidos') {
+                    document.getElementById('add-order-btn').addEventListener('click', openOrderModal);
+                }
+                 if (pageId === 'chat') {
+                    document.getElementById('chat-send').addEventListener('click', handleUserInput);
+                    document.getElementById('chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleUserInput(); });
+                }
+            }
+            function buildNav() {
+                const navDesktopContainer = navDesktop;
+                const navMobileContainer = mobileMenu;
+                let desktopHTML = '';
+                let mobileHTML = '';
+                navItems.forEach(item => {
+                    const linkClass = item.isPrimary 
+                        ? 'bg-blue-600 hover:bg-blue-700' 
+                        : 'hover:bg-gray-700';
+                    desktopHTML += `<a href="#" class="nav-link flex items-center p-3 rounded-lg ${linkClass}" data-page="${item.page}"><i class="fas ${item.icon} w-6 text-center"></i><span class="ml-3">${item.label}</span></a>`;
+                    mobileHTML += `<a href="#" class="nav-link block p-3 rounded-lg ${linkClass}" data-page="${item.page}">${item.label}</a>`;
+                });
+                navDesktopContainer.innerHTML += desktopHTML;
+                navMobileContainer.innerHTML += mobileHTML;
+                document.querySelectorAll('.nav-link').forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        renderPage(link.dataset.page);
+                    });
+                });
+            }
+            auth.onAuthStateChanged(user => {
+                currentUser = user;
+                if (user) {
+                    renderPage('chat');
+                } else {
+                    renderPage('login');
+                }
+            });
+            document.addEventListener('userLoggedIn', () => {
+                renderPage('chat');
+            });
+            gapi.load('client:auth2', () => { gapi.auth2.init({ client_id: CLIENT_ID }).then(initGapiClient); });
+            function initGapiClient() {
+              gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: DISCOVERY_DOCS,
+                clientId: CLIENT_ID,
+                scope: SCOPES
+              }).then(() => {
+                gapiAuth2 = gapi.auth2.getAuthInstance();
+                updateAuthStatus();
+              });
+            }
+
+            function updateAuthStatus() {
+              const isSignedIn = gapiAuth2.isSignedIn.get();
+              authStatusTextDesktop.textContent = isSignedIn ? '✅ Conectado' : '❌ Não conectado';
+              authStatusTextMobile.textContent = isSignedIn ? '✅ Conectado' : '❌ Não conectado';
+            }
+        });
+    </script>
+</body>
+</html>
