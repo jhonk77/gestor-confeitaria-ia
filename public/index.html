@@ -23,6 +23,65 @@
       };
       firebase.initializeApp(firebaseConfig);
       const auth = firebase.auth();
+      const functions = firebase.functions();
+
+      // Função para enviar mensagem para o backend e receber resposta
+      async function sendMessageToBackend(message) {
+        const assistenteHttp = functions.httpsCallable('assistenteHttp');
+        try {
+          const response = await assistenteHttp({
+            intent: 'gerarAnalise',
+            payload: { query: message },
+            spreadsheetIds: {} // Pode ser ajustado para enviar IDs reais se necessário
+          });
+          return response.data;
+        } catch (error) {
+          console.error('Erro ao chamar função assistenteHttp:', error);
+          return { success: false, message: 'Erro ao processar a mensagem.' };
+        }
+      }
+
+      // Função para adicionar mensagem no chat
+      function addMessageToChat(message, fromUser = true) {
+        const chatContainer = document.getElementById('chat-container');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = fromUser
+          ? 'flex mb-4 justify-end'
+          : 'flex mb-4 justify-start';
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.className = fromUser
+          ? 'bg-blue-500 text-white rounded-lg p-3 max-w-xs'
+          : 'bg-gray-200 text-gray-800 rounded-lg p-3 max-w-xs';
+        bubbleDiv.textContent = message;
+        messageDiv.appendChild(bubbleDiv);
+        chatContainer.appendChild(messageDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+
+      // Função para lidar com o envio do input do chat
+      async function handleUserInput() {
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+        if (!message) return;
+        addMessageToChat(message, true);
+        input.value = '';
+        const response = await sendMessageToBackend(message);
+        if (response.success) {
+          addMessageToChat(response.analysis || response.message || 'Resposta recebida.', false);
+        } else {
+          addMessageToChat('Erro: ' + (response.message || 'Resposta inválida.'), false);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        // Código existente omitido para brevidade...
+
+        // Adicionar event listeners para o chat
+        document.getElementById('chat-send').addEventListener('click', handleUserInput);
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') handleUserInput();
+        });
+      });
     </script>
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -132,7 +191,20 @@
                             <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" class="w-5 h-5 mr-2">
                             <span>Entrar com Google</span>
                         </button>
-                    </div>`,
+                    </div>`
+
+            };
+            document.addEventListener('DOMContentLoaded', () => {
+                const loginBtn = document.getElementById('google-auth-btn-login');
+                if (loginBtn) {
+                    loginBtn.addEventListener('click', () => {
+                        const provider = new firebase.auth.GoogleAuthProvider();
+                        firebase.auth().signInWithPopup(provider).then(() => {
+                            document.dispatchEvent(new Event('userLoggedIn'));
+                        });
+                    });
+                }
+            });
                 dashboard: `
                     <h1 class="text-3xl font-bold mb-6">Dashboard</h1>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

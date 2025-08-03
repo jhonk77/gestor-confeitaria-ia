@@ -1,0 +1,20 @@
+apiVersion: skaffold/v4beta13
+kind: Config
+metadata:
+  name: Gestor-confeitaria-ia
+build:
+  artifacts:
+  - image: gcr.io/gestor-confeitaria-ia/gestor-confeitaria-ia
+    buildpacks:
+      builder: gcr.io/buildpacks/builder:v1
+      projectDescriptor: project.toml
+      dependencies:
+        paths:
+        - .
+  tagPolicy:
+    gitCommit: {}
+  local:
+    concurrency: 1
+deploy:
+  logs:
+    prefix: container
