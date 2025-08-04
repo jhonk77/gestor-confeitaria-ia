@@ -1,8 +1,9 @@
 /**
- * Firebase Cloud Functions: Agente Orquestrador para o Gestor de Confeitaria.
+ * Firebase Cloud Functions v2: Agente Orquestrador para o Gestor de Confeitaria.
  */
 
-import * as functions from "firebase-functions";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { google } from "googleapis";
 import { ImageAnnotatorClient } from "@google-cloud/vision";
@@ -21,17 +22,17 @@ const sheets = google.sheets({ version: 'v4', auth });
 const drive = google.drive({ version: 'v3', auth });
 
 // --- PONTO DE ENTRADA PRINCIPAL (HANDLER DA FUNÇÃO) ---
-exports.assistenteHttp = functions.region('southamerica-east1').https.onCall(async (data, context) => {
+export const assistenteHttp = onCall({ region: 'southamerica-east1' }, async (request) => {
     // Garante que o utilizador está autenticado para a maioria das operações
-    if (!context.auth && data.intent !== 'healthCheck' && data.intent !== 'setupDatabase') {
-        throw new functions.https.HttpsError('unauthenticated', 'A operação requer autenticação.');
+    if (!request.auth && request.data.intent !== 'healthCheck') {
+        throw new HttpsError('unauthenticated', 'A operação requer autenticação.');
     }
 
-    const { intent, payload, spreadsheetIds } = data;
-    const uid = context.auth?.uid;
+    const { intent, payload, spreadsheetIds } = request.data;
+    const uid = request.auth?.uid;
     let responsePayload = {};
 
-    console.log(`Recebida intenção: ${intent} para o utilizador: ${uid}`);
+    logger.info(`Recebida intenção: ${intent} para o utilizador: ${uid}`);
 
     try {
         // --- AGENTE ORQUESTRADOR ---
@@ -66,8 +67,8 @@ exports.assistenteHttp = functions.region('southamerica-east1').https.onCall(asy
         }
         return responsePayload;
     } catch (error: any) {
-        console.error(`Erro crítico no Agente Orquestrador para a intenção "${intent}":`, error);
-        throw new functions.https.HttpsError('internal', 'Ocorreu um erro inesperado no servidor.', { error: error.message });
+        logger.error(`Erro crítico no Agente Orquestrador para a intenção "${intent}":`, error);
+        throw new HttpsError('internal', 'Ocorreu um erro inesperado no servidor.', { error: error.message });
     }
 });
 
@@ -81,7 +82,7 @@ async function getProximaLinhaVazia(spreadsheetId: string, range: string): Promi
         return (response.data.values ? response.data.values.length : 0) + 1;
     } catch (error: any) {
         if (error.code === 400 && error.message.includes('Unable to parse range')) {
-            console.warn(`Aba para o range "${range}" não encontrada. Assumindo linha 1.`);
+            logger.warn(`Aba para o range "${range}" não encontrada. Assumindo linha 1.`);
             return 1;
         }
         throw error;
@@ -93,7 +94,7 @@ async function getProximaLinhaVazia(spreadsheetId: string, range: string): Promi
 const agenteSetup = {
     configurarPlanilhas: async (payload: any, uid?: string) => {
         if (!uid) {
-            throw new functions.https.HttpsError('unauthenticated', 'A operação requer autenticação.');
+            throw new HttpsError('unauthenticated', 'A operação requer autenticação.');
         }
         const { financeiroFile, operacoesFile } = payload;
 
@@ -114,7 +115,6 @@ const agenteSetup = {
         const financeiroId = await uploadAndConvert(financeiroFile, 'Controle_Financeiro_Anual');
         const operacoesId = await uploadAndConvert(operacoesFile, 'Precificacao_e_Operacoes');
 
-        // Adiciona abas faltantes
         const spreadsheetFinanceiro = await sheets.spreadsheets.get({ spreadsheetId: financeiroId });
         const abasExistentesFinanceiro = spreadsheetFinanceiro.data.sheets?.map(s => s.properties?.title) || [];
         const requestsFinanceiro = ['CLIENTES', 'PEDIDOS_AGENDA'].filter(aba => !abasExistentesFinanceiro.includes(aba)).map(aba => ({ addSheet: { properties: { title: aba } } }));
@@ -207,7 +207,7 @@ const agenteEstoque = {
                 resource: { values: [[novoEstoque]] },
             });
         } else {
-            console.warn(`Insumo "${item}" não encontrado no estoque para dar baixa.`);
+            logger.warn(`Insumo "${item}" não encontrado no estoque para dar baixa.`);
         }
     }
 };
