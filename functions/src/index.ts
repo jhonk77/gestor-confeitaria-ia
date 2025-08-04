@@ -3,7 +3,7 @@
  * Sistema otimizado com cache, monitoramento e backup automático
  */
 
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, CallableContext } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { google } from "googleapis";
@@ -67,6 +67,9 @@ const visionClient = new ImageAnnotatorClient();
 const vertexAI = new VertexAI({ project: process.env.GCLOUD_PROJECT, location: 'us-central1' });
 
 // --- PONTO DE ENTRADA PRINCIPAL OTIMIZADO ---
+import { startOnboarding, processOnboardingResponse, getOnboardingStatus } from "./modules/onboarding";
+import { setupSuperAdmin, getAdminDashboard, listAllUsers, getUserDetails, updateUserPlan, getAdminLogs, checkAdminStatus } from "./modules/admin";
+
 export const assistenteHttp = onCall({ region: 'southamerica-east1' }, async (request) => {
     const startTime = Date.now();
     
@@ -91,41 +94,58 @@ export const assistenteHttp = onCall({ region: 'southamerica-east1' }, async (re
         // --- AGENTE ORQUESTRADOR OTIMIZADO ---
         switch (intent) {
             case 'healthCheck':
-                responsePayload = await handleHealthCheck();
+                responsePayload = { success: true, message: 'O sistema está online e a operar!' };
                 break;
-            case 'setupDatabase':
-                responsePayload = await handleSetupUser(payload, uid!);
+            case 'startOnboarding': {
+                const result = await startOnboarding(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'registrarDespesa':
-                responsePayload = await handleRegistrarDespesa(payload, uid!);
+            }
+            case 'processOnboardingResponse': {
+                const result = await processOnboardingResponse(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'listarDespesas':
-                responsePayload = await handleListarDespesas(payload, uid!);
+            }
+            case 'getOnboardingStatus': {
+                const result = await getOnboardingStatus(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'processarDocumento':
-                responsePayload = await handleProcessarDocumento(payload, uid!);
+            }
+            case 'setupSuperAdmin': {
+                const result = await setupSuperAdmin(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'registrarPedido':
-                responsePayload = await handleRegistrarPedido(payload, uid!);
+            }
+            case 'getAdminDashboard': {
+                const result = await getAdminDashboard(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'listarPedidos':
-                responsePayload = await handleListarPedidos(payload, uid!);
+            }
+            case 'listAllUsers': {
+                const result = await listAllUsers(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'criarNovaReceita':
-                responsePayload = await handleCriarReceita(payload, uid!);
+            }
+            case 'getUserDetails': {
+                const result = await getUserDetails(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'listarReceitas':
-                responsePayload = await handleListarReceitas(payload, uid!);
+            }
+            case 'updateUserPlan': {
+                const result = await updateUserPlan(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'gerarAnalise':
-                responsePayload = await handleGerarAnalise(payload, uid!);
+            }
+            case 'getAdminLogs': {
+                const result = await getAdminLogs(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'getCacheStats':
-                responsePayload = await handleGetCacheStats();
+            }
+            case 'checkAdminStatus': {
+                const result = await checkAdminStatus(request);
+                responsePayload = result === undefined ? {} : result;
                 break;
-            case 'invalidateCache':
-                responsePayload = await handleInvalidateCache(uid!);
-                break;
+            }
             default:
                 responsePayload = { success: false, message: `Intenção '${intent}' não reconhecida.` };
                 success = false;
