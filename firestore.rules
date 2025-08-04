@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Regras para dados dos usuários - cada usuário só acessa seus próprios dados
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Subcoleções do usuário
+      match /{subcollection=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Dados públicos/compartilhados (se necessário)
+    match /public/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // Apenas admins podem escrever
+    }
+    
+    // Logs de sistema (apenas leitura para o próprio usuário)
+    match /logs/{userId}/entries/{entryId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Apenas functions podem escrever logs
+    }
+  }
+}

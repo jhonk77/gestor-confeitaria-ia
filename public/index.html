@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestor Confeitaria Inteligente</title>
+    <title>Gestor Confeitaria Inteligente - FASE 1</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1F2937">
     <link rel="apple-touch-icon" href="https://placehold.co/192x192/1F2937/FFFFFF?text=IA">
@@ -18,6 +18,7 @@
         .toast.show { opacity: 1; bottom: 40px; }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .plan-badge { position: absolute; top: -8px; right: -8px; background: linear-gradient(45deg, #3B82F6, #1D4ED8); color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -26,6 +27,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-functions-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js'); });
@@ -39,19 +41,27 @@
                 messagingSenderId: "680331013226",
                 appId: "1:680331013226:web:a9c8b7f6e5d4a3b2c1d0e1"
             };
+            
             firebase.initializeApp(firebaseConfig);
             const auth = firebase.auth();
             const functions = firebase.functions();
-            functions.useEmulator('localhost', 5001);
-            let spreadsheetIds = JSON.parse(localStorage.getItem('spreadsheetIds'));
+            const db = firebase.firestore();
+            
+            // Configurar emuladores se em desenvolvimento
+            if (location.hostname === 'localhost') {
+                functions.useEmulator('localhost', 5001);
+                db.useEmulator('localhost', 8080);
+            }
+            
             let currentUser = null;
+            let userProfile = null;
             const appContainer = document.getElementById('app-container');
 
             async function callAgent(intent, payload = {}) {
                 showToast('A processar com o Agente de IA...', 'bg-blue-500');
                 const callFunction = functions.httpsCallable('assistenteHttp');
                 try {
-                    const result = await callFunction({ intent, payload, spreadsheetIds });
+                    const result = await callFunction({ intent, payload });
                     showToast(result.data.message || 'Tarefa concluída!', 'bg-green-500');
                     return result.data;
                 } catch (error) {
@@ -61,77 +71,111 @@
                 }
             }
 
-            auth.onAuthStateChanged(user => {
+            async function loadUserProfile() {
+                if (!currentUser) return null;
+                try {
+                    const doc = await db.collection('users').doc(currentUser.uid).get();
+                    userProfile = doc.exists ? doc.data() : null;
+                    return userProfile;
+                } catch (error) {
+                    console.error('Erro ao carregar perfil:', error);
+                    return null;
+                }
+            }
+
+            auth.onAuthStateChanged(async user => {
                 currentUser = user;
+                if (user) {
+                    await loadUserProfile();
+                    if (!userProfile) {
+                        // Criar perfil do usuário automaticamente
+                        await callAgent('setupDatabase', {
+                            email: user.email,
+                            displayName: user.displayName,
+                            photoURL: user.photoURL
+                        });
+                        await loadUserProfile();
+                    }
+                }
                 renderApp();
             });
 
             function renderApp() {
                 if (!currentUser) {
                     renderLoginScreen();
-                } else if (!spreadsheetIds) {
-                    renderSetupScreen();
                 } else {
                     renderMainApp();
                 }
             }
 
             function renderLoginScreen() {
-                appContainer.innerHTML = `<div class="flex items-center justify-center h-screen bg-gray-800"><div class="text-center text-white p-4"><h1 class="text-4xl font-bold mb-4">Gestor de Confeitaria IA</h1><p class="mb-8">Faça login para continuar</p><button id="login-btn" class="bg-white text-gray-700 font-semibold py-2 px-6 rounded-lg flex items-center justify-center mx-auto hover:bg-gray-200"><img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" class="w-6 h-6 mr-3">Entrar com Google</button></div></div>`;
+                appContainer.innerHTML = `
+                    <div class="flex items-center justify-center h-screen bg-gray-800">
+                        <div class="text-center text-white p-4">
+                            <h1 class="text-4xl font-bold mb-4">Gestor de Confeitaria IA</h1>
+                            <p class="mb-2 text-lg">FASE 1: Dados Seguros e Isolados</p>
+                            <p class="mb-8 text-sm opacity-75">Agora cada usuário tem seus dados completamente privados</p>
+                            <button id="login-btn" class="bg-white text-gray-700 font-semibold py-2 px-6 rounded-lg flex items-center justify-center mx-auto hover:bg-gray-200">
+                                <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" class="w-6 h-6 mr-3">
+                                Entrar com Google
+                            </button>
+                        </div>
+                    </div>
+                `;
                 document.getElementById('login-btn').addEventListener('click', () => {
                     const provider = new firebase.auth.GoogleAuthProvider();
-                    auth.signInWithPopup(provider).catch(error => { showToast(`Erro no login: ${error.message}`, 'bg-red-500'); });
-                });
-            }
-
-            function renderSetupScreen() {
-                appContainer.innerHTML = `<div class="flex items-center justify-center h-screen p-4"><div class="text-center p-8 bg-white rounded-lg shadow-xl w-full max-w-lg"><h1 class="text-2xl font-bold mb-2">Configuração Inicial</h1><p class="text-gray-600 mb-6">Para começar, por favor, carregue as suas planilhas base.</p><div class="mb-4"><label class="block text-gray-700 text-sm font-bold mb-2 text-left">1. Planilha de Controle Financeiro</label><input type="file" id="financeiro-file" class="w-full border rounded p-2" accept=".xlsx"></div><div class="mb-6"><label class="block text-gray-700 text-sm font-bold mb-2 text-left">2. Planilha de Preços e Operações</label><input type="file" id="operacoes-file" class="w-full border rounded p-2" accept=".xlsx"></div><button id="setup-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full">Iniciar Configuração</button><div id="setup-loader" class="hidden mx-auto mt-4 loader"></div></div></div>`;
-                document.getElementById('setup-btn').addEventListener('click', async () => {
-                    const financeiroInput = document.getElementById('financeiro-file');
-                    const operacoesInput = document.getElementById('operacoes-file');
-                    if (financeiroInput.files.length === 0 || operacoesInput.files.length === 0) {
-                        showToast('Por favor, selecione ambos os ficheiros.', 'bg-red-500'); return;
-                    }
-                    document.getElementById('setup-btn').classList.add('hidden');
-                    document.getElementById('setup-loader').classList.remove('hidden');
-                    const fileToBase64 = file => new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.readAsDataURL(file);
-                        reader.onload = () => resolve(reader.result.split(',')[1]);
-                        reader.onerror = error => reject(error);
+                    auth.signInWithPopup(provider).catch(error => { 
+                        showToast(`Erro no login: ${error.message}`, 'bg-red-500'); 
                     });
-                    try {
-                        const financeiroFile = await fileToBase64(financeiroInput.files[0]);
-                        const operacoesFile = await fileToBase64(operacoesInput.files[0]);
-                        const result = await callAgent('setupDatabase', { financeiroFile, operacoesFile });
-                        if (result.success) {
-                            localStorage.setItem('spreadsheetIds', JSON.stringify(result.spreadsheetIds));
-                            spreadsheetIds = result.spreadsheetIds;
-                            showToast('Configuração concluída! A recarregar...', 'bg-green-500');
-                            setTimeout(() => window.location.reload(), 2000);
-                        } else { throw new Error(result.message || 'Erro no setup.'); }
-                    } catch (error) {
-                        showToast(`Erro na configuração: ${error.message}`, 'bg-red-500');
-                        document.getElementById('setup-btn').classList.remove('hidden');
-                        document.getElementById('setup-loader').classList.add('hidden');
-                    }
                 });
             }
 
             function renderMainApp() {
-                appContainer.innerHTML = `<div id="app" class="flex flex-col md:flex-row h-screen"><nav class="hidden md:flex flex-col w-64 bg-gray-800 text-white p-4 space-y-2"><div class="text-2xl font-bold mb-4">Gestor IA</div><div class="mb-4"><button id="logout-btn" class="w-full bg-red-500 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center hover:bg-red-600"><i class="fas fa-sign-out-alt mr-2"></i><span>Sair</span></button></div></nav><main class="flex-1 flex flex-col overflow-hidden"><header class="md:hidden bg-gray-800 text-white p-4 flex justify-between items-center shadow-lg"><div class="text-xl font-bold">Gestor IA</div><button id="menu-button" class="text-2xl"><i class="fas fa-bars"></i></button></header><div id="mobile-menu" class="hidden md:hidden bg-gray-800 text-white p-2"></div><div id="page-container" class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto"></div></main></div>`;
+                appContainer.innerHTML = `
+                    <div id="app" class="flex flex-col md:flex-row h-screen">
+                        <nav class="hidden md:flex flex-col w-64 bg-gray-800 text-white p-4 space-y-2">
+                            <div class="text-2xl font-bold mb-4 relative">
+                                Gestor IA
+                                <div class="plan-badge">${userProfile?.plan?.toUpperCase() || 'FREE'}</div>
+                            </div>
+                            <div class="mb-4 p-3 bg-gray-700 rounded-lg">
+                                <div class="text-sm opacity-75">Bem-vindo,</div>
+                                <div class="font-semibold">${currentUser.displayName || currentUser.email}</div>
+                                <div class="text-xs opacity-50 mt-1">Dados 100% privados</div>
+                            </div>
+                            <div class="mb-4">
+                                <button id="logout-btn" class="w-full bg-red-500 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center hover:bg-red-600">
+                                    <i class="fas fa-sign-out-alt mr-2"></i><span>Sair</span>
+                                </button>
+                            </div>
+                        </nav>
+                        <main class="flex-1 flex flex-col overflow-hidden">
+                            <header class="md:hidden bg-gray-800 text-white p-4 flex justify-between items-center shadow-lg">
+                                <div class="text-xl font-bold">Gestor IA</div>
+                                <button id="menu-button" class="text-2xl"><i class="fas fa-bars"></i></button>
+                            </header>
+                            <div id="mobile-menu" class="hidden md:hidden bg-gray-800 text-white p-2"></div>
+                            <div id="page-container" class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto"></div>
+                        </main>
+                    </div>
+                `;
                 buildNav();
-                renderPage('chat');
-                document.getElementById('logout-btn').addEventListener('click', () => { localStorage.removeItem('spreadsheetIds'); auth.signOut(); });
-                document.getElementById('menu-button').addEventListener('click', () => { document.getElementById('mobile-menu').classList.toggle('hidden'); });
+                renderPage('dashboard');
+                document.getElementById('logout-btn').addEventListener('click', () => { 
+                    auth.signOut(); 
+                });
+                document.getElementById('menu-button')?.addEventListener('click', () => { 
+                    document.getElementById('mobile-menu').classList.toggle('hidden'); 
+                });
             }
 
             function buildNav() {
                 const navItems = [
+                    { id: 'dashboard', icon: 'fas fa-tachometer-alt', label: 'Dashboard' },
                     { id: 'chat', icon: 'fas fa-comments', label: 'Chat IA' },
                     { id: 'financeiro', icon: 'fas fa-chart-line', label: 'Financeiro' },
-                    { id: 'producao', icon: 'fas fa-cogs', label: 'Produção' },
-                    { id: 'pedidos', icon: 'fas fa-shopping-cart', label: 'Pedidos' }
+                    { id: 'pedidos', icon: 'fas fa-shopping-cart', label: 'Pedidos' },
+                    { id: 'receitas', icon: 'fas fa-book', label: 'Receitas' }
                 ];
                 
                 const nav = document.querySelector('nav');
@@ -139,24 +183,73 @@
                     const navLink = document.createElement('button');
                     navLink.className = 'nav-link w-full text-left p-3 rounded-lg hover:bg-gray-700 flex items-center';
                     navLink.innerHTML = `<i class="${item.icon} mr-3"></i><span>${item.label}</span>`;
-                    navLink.addEventListener('click', () => renderPage(item.id));
+                    navLink.addEventListener('click', () => {
+                        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+                        navLink.classList.add('active');
+                        renderPage(item.id);
+                    });
                     nav.appendChild(navLink);
                 });
             }
             
             function renderPage(pageId) {
                 const container = document.getElementById('page-container');
-                document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
                 
                 switch(pageId) {
+                    case 'dashboard':
+                        container.innerHTML = `
+                            <div class="max-w-6xl mx-auto">
+                                <h1 class="text-3xl font-bold mb-6">Dashboard - FASE 1 Implementada!</h1>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                    <div class="bg-green-100 border-l-4 border-green-500 p-4 rounded-lg">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-shield-alt text-green-500 text-2xl mr-3"></i>
+                                            <div>
+                                                <h3 class="font-bold text-green-800">Dados Seguros</h3>
+                                                <p class="text-green-600 text-sm">Firestore com isolamento por usuário</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-blue-100 border-l-4 border-blue-500 p-4 rounded-lg">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-database text-blue-500 text-2xl mr-3"></i>
+                                            <div>
+                                                <h3 class="font-bold text-blue-800">Banco Moderno</h3>
+                                                <p class="text-blue-600 text-sm">Migração do Sheets para Firestore</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-purple-100 border-l-4 border-purple-500 p-4 rounded-lg">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-users text-purple-500 text-2xl mr-3"></i>
+                                            <div>
+                                                <h3 class="font-bold text-purple-800">Multi-usuário</h3>
+                                                <p class="text-purple-600 text-sm">Pronto para múltiplos usuários</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-white rounded-lg shadow-lg p-6">
+                                    <h2 class="text-xl font-bold mb-4">Melhorias da FASE 1</h2>
+                                    <ul class="space-y-2">
+                                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-2"></i> Dados isolados por usuário</li>
+                                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-2"></i> Regras de segurança implementadas</li>
+                                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-2"></i> Sistema de planos (Free/Pro/Enterprise)</li>
+                                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-2"></i> Logs de atividade do usuário</li>
+                                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-2"></i> Performance otimizada</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        `;
+                        break;
                     case 'chat':
                         container.innerHTML = `
                             <div class="max-w-4xl mx-auto">
-                                <h1 class="text-3xl font-bold mb-6">Assistente IA</h1>
+                                <h1 class="text-3xl font-bold mb-6">Assistente IA - Dados Privados</h1>
                                 <div class="bg-white rounded-lg shadow-lg p-6">
                                     <div id="chat-messages" class="h-96 overflow-y-auto mb-4 p-4 border rounded-lg bg-gray-50"></div>
                                     <div class="flex gap-2">
-                                        <input type="text" id="chat-input" placeholder="Digite sua pergunta..." class="flex-1 p-3 border rounded-lg">
+                                        <input type="text" id="chat-input" placeholder="Digite sua pergunta sobre seus dados..." class="flex-1 p-3 border rounded-lg">
                                         <button id="send-btn" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">Enviar</button>
                                     </div>
                                 </div>
@@ -167,23 +260,31 @@
                     case 'financeiro':
                         container.innerHTML = `
                             <div class="max-w-4xl mx-auto">
-                                <h1 class="text-3xl font-bold mb-6">Controle Financeiro</h1>
-                                <div class="bg-white rounded-lg shadow-lg p-6">
-                                    <form id="despesa-form" class="space-y-4">
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <input type="date" id="data-despesa" class="p-3 border rounded-lg" required>
-                                            <select id="tipo-despesa" class="p-3 border rounded-lg" required>
+                                <h1 class="text-3xl font-bold mb-6">Controle Financeiro - Firestore</h1>
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div class="bg-white rounded-lg shadow-lg p-6">
+                                        <h2 class="text-xl font-bold mb-4">Nova Despesa</h2>
+                                        <form id="despesa-form" class="space-y-4">
+                                            <input type="date" id="data-despesa" class="w-full p-3 border rounded-lg" required>
+                                            <select id="tipo-despesa" class="w-full p-3 border rounded-lg" required>
                                                 <option value="">Tipo de Despesa</option>
                                                 <option value="Ingredientes">Ingredientes</option>
                                                 <option value="Embalagens">Embalagens</option>
                                                 <option value="Equipamentos">Equipamentos</option>
                                                 <option value="Outros">Outros</option>
                                             </select>
-                                            <input type="number" id="valor-despesa" placeholder="Valor" class="p-3 border rounded-lg" step="0.01" required>
-                                            <input type="text" id="fornecedor-despesa" placeholder="Fornecedor" class="p-3 border rounded-lg" required>
+                                            <input type="number" id="valor-despesa" placeholder="Valor" class="w-full p-3 border rounded-lg" step="0.01" required>
+                                            <input type="text" id="fornecedor-despesa" placeholder="Fornecedor" class="w-full p-3 border rounded-lg" required>
+                                            <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700">Registrar Despesa</button>
+                                        </form>
+                                    </div>
+                                    <div class="bg-white rounded-lg shadow-lg p-6">
+                                        <h2 class="text-xl font-bold mb-4">Despesas Recentes</h2>
+                                        <div id="despesas-list" class="space-y-2">
+                                            <div class="text-center text-gray-500 py-4">Carregando...</div>
                                         </div>
-                                        <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700">Registrar Despesa</button>
-                                    </form>
+                                        <button id="load-despesas" class="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Carregar Despesas</button>
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -213,6 +314,9 @@
                     
                     callAgent('gerarAnalise', { query: message }).then(result => {
                         chatMessages.innerHTML += `<div class="mb-4"><div class="bg-gray-100 p-3 rounded-lg mr-auto max-w-xs"><strong>IA:</strong> ${result.analysis || result.message}</div></div>`;
+                        if (result.summary) {
+                            chatMessages.innerHTML += `<div class="mb-4"><div class="bg-green-100 p-3 rounded-lg mr-auto max-w-xs text-sm"><strong>Resumo:</strong><br>Despesas: R$ ${result.summary.totalExpenses?.toFixed(2)}<br>Receitas: R$ ${result.summary.totalRevenue?.toFixed(2)}<br>Lucro: R$ ${result.summary.profit?.toFixed(2)}</div></div>`;
+                        }
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                     }).catch(error => {
                         chatMessages.innerHTML += `<div class="mb-4"><div class="bg-red-100 p-3 rounded-lg mr-auto max-w-xs"><strong>Erro:</strong> ${error.message}</div></div>`;
@@ -227,6 +331,8 @@
             
             function setupFinanceiroHandlers() {
                 const form = document.getElementById('despesa-form');
+                const loadBtn = document.getElementById('load-despesas');
+                
                 form.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     
@@ -238,10 +344,36 @@
                     try {
                         await callAgent('registrarDespesa', { data, tipo, valor, fornecedor });
                         form.reset();
+                        loadDespesas(); // Recarregar lista
                     } catch (error) {
                         console.error('Erro ao registrar despesa:', error);
                     }
                 });
+                
+                loadBtn.addEventListener('click', loadDespesas);
+                
+                async function loadDespesas() {
+                    try {
+                        const result = await callAgent('listarDespesas', { limit: 10 });
+                        const despesasList = document.getElementById('despesas-list');
+                        
+                        if (result.expenses && result.expenses.length > 0) {
+                            despesasList.innerHTML = result.expenses.map(expense => `
+                                <div class="border-l-4 border-blue-500 pl-3 py-2">
+                                    <div class="font-semibold">${expense.type} - R$ ${expense.value.toFixed(2)}</div>
+                                    <div class="text-sm text-gray-600">${expense.supplier} - ${expense.date}</div>
+                                </div>
+                            `).join('');
+                        } else {
+                            despesasList.innerHTML = '<div class="text-center text-gray-500 py-4">Nenhuma despesa encontrada</div>';
+                        }
+                    } catch (error) {
+                        console.error('Erro ao carregar despesas:', error);
+                    }
+                }
+                
+                // Carregar despesas automaticamente
+                loadDespesas();
             }
             
             function showToast(message, bgColor) {
