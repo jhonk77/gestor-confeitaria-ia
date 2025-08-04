@@ -37,6 +37,8 @@ export interface Expense {
   type: string;
   value: number;
   supplier: string;
+  description?: string; // Novo campo
+  category?: string; // Novo campo
   createdAt: admin.firestore.Timestamp;
 }
 
@@ -97,6 +99,17 @@ export const createExpense = async (expense: Omit<Expense, 'id' | 'createdAt'>):
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
   return expenseRef.id;
+};
+
+export const updateExpense = async (userId: string, expenseId: string, data: Partial<Expense>): Promise<void> => {
+  await db.collection('users').doc(userId).collection('expenses').doc(expenseId).update({
+    ...data,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+};
+
+export const deleteExpense = async (userId: string, expenseId: string): Promise<void> => {
+  await db.collection('users').doc(userId).collection('expenses').doc(expenseId).delete();
 };
 
 export const getExpenses = async (userId: string, limit: number = 50): Promise<Expense[]> => {
@@ -253,3 +266,58 @@ export const checkPlanLimits = async (userId: string, action: string): Promise<b
       return true;
   }
 };
+
+export interface InventoryItem {
+  id?: string;
+  userId: string;
+  name: string;
+  quantity: number;
+  unit: string; // ex: 'kg', 'g', 'litros', 'ml', 'unidades'
+  lowStockThreshold: number;
+  createdAt: admin.firestore.Timestamp;
+  updatedAt: admin.firestore.Timestamp;
+}
+
+// Funções para gerenciar o estoque
+export const addInventoryItem = async (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const itemRef = await db.collection('users').doc(item.userId).collection('inventory').add({
+    ...item,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  return itemRef.id;
+};
+
+export const getInventory = async (userId: string): Promise<InventoryItem[]> => {
+  const snapshot = await db.collection('users').doc(userId).collection('inventory')
+    .orderBy('name', 'asc')
+    .get();
+  
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  } as InventoryItem));
+};
+
+export const updateInventoryItem = async (userId: string, itemId: string, data: Partial<InventoryItem>): Promise<void> => {
+  await db.collection('users').doc(userId).collection('inventory').doc(itemId).update({
+    ...data,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+};
+
+export const deleteInventoryItem = async (userId: string, itemId: string): Promise<void> => {
+  await db.collection('users').doc(userId).collection('inventory').doc(itemId).delete();
+};
+
+export const getLowStockItems = async (userId: string): Promise<InventoryItem[]> => {
+    const snapshot = await db.collection('users').doc(userId).collection('inventory').get();
+    
+    const allItems = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    } as InventoryItem));
+
+    return allItems.filter(item => item.quantity <= item.lowStockThreshold);
+};
+

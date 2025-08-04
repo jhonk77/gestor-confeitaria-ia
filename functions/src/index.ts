@@ -22,7 +22,12 @@ import {
     createRecipe,
     getRecipes,
     logUserAction,
-    checkPlanLimits
+    checkPlanLimits,
+    addInventoryItem,
+    getInventory,
+    updateInventoryItem,
+    deleteInventoryItem,
+    getLowStockItems
 } from "./database";
 
 import { CacheManager } from "./modules/cache";
@@ -94,58 +99,105 @@ export const assistenteHttp = onCall({ region: 'southamerica-east1' }, async (re
         // --- AGENTE ORQUESTRADOR OTIMIZADO ---
         switch (intent) {
             case 'healthCheck':
-                responsePayload = { success: true, message: 'O sistema está online e a operar!' };
+                responsePayload = await handleHealthCheck();
                 break;
-            case 'startOnboarding': {
-                const result = await startOnboarding(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'startOnboarding':
+                responsePayload = await startOnboarding(request);
                 break;
-            }
-            case 'processOnboardingResponse': {
-                const result = await processOnboardingResponse(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'processOnboardingResponse':
+                responsePayload = await processOnboardingResponse(request);
                 break;
-            }
-            case 'getOnboardingStatus': {
-                const result = await getOnboardingStatus(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'getOnboardingStatus':
+                responsePayload = await getOnboardingStatus(request);
                 break;
-            }
-            case 'setupSuperAdmin': {
-                const result = await setupSuperAdmin(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'setupSuperAdmin':
+                responsePayload = await setupSuperAdmin(request);
                 break;
-            }
-            case 'getAdminDashboard': {
-                const result = await getAdminDashboard(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'getAdminDashboard':
+                responsePayload = await getAdminDashboard(request);
                 break;
-            }
-            case 'listAllUsers': {
-                const result = await listAllUsers(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'listAllUsers':
+                responsePayload = await listAllUsers(request);
                 break;
-            }
-            case 'getUserDetails': {
-                const result = await getUserDetails(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'getUserDetails':
+                responsePayload = await getUserDetails(request);
                 break;
-            }
-            case 'updateUserPlan': {
-                const result = await updateUserPlan(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'updateUserPlan':
+                responsePayload = await updateUserPlan(request);
                 break;
-            }
-            case 'getAdminLogs': {
-                const result = await getAdminLogs(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'getAdminLogs':
+                responsePayload = await getAdminLogs(request);
                 break;
-            }
-            case 'checkAdminStatus': {
-                const result = await checkAdminStatus(request);
-                responsePayload = result === undefined ? {} : result;
+            case 'checkAdminStatus':
+                responsePayload = await checkAdminStatus(request);
                 break;
-            }
+            case 'setupUser':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleSetupUser(payload, uid);
+                break;
+            case 'registrarDespesa':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleRegistrarDespesa(payload, uid);
+                break;
+            case 'updateExpense':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleUpdateExpense(payload, uid);
+                break;
+            case 'deleteExpense':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleDeleteExpense(payload, uid);
+                break;
+            case 'listarDespesas':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleListarDespesas(payload, uid);
+                break;
+            case 'processarDocumento':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleProcessarDocumento(payload, uid);
+                break;
+            case 'registrarPedido':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleRegistrarPedido(payload, uid);
+                break;
+            case 'listarPedidos':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleListarPedidos(payload, uid);
+                break;
+            case 'criarReceita':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleCriarReceita(payload, uid);
+                break;
+            case 'listarReceitas':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleListarReceitas(payload, uid);
+                break;
+            case 'gerarAnalise':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleGerarAnalise(payload, uid);
+                break;
+            case 'getCacheStats':
+                responsePayload = await handleGetCacheStats();
+                break;
+            case 'invalidateCache':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleInvalidateCache(uid);
+                break;
+            case 'addInventoryItem':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleAddInventoryItem(payload, uid);
+                break;
+            case 'getInventory':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleGetInventory(uid);
+                break;
+            case 'updateInventoryItem':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleUpdateInventoryItem(payload, uid);
+                break;
+            case 'deleteInventoryItem':
+                if (!uid) throw new HttpsError('unauthenticated', 'UID é necessário.');
+                responsePayload = await handleDeleteInventoryItem(payload, uid);
+                break;
             default:
                 responsePayload = { success: false, message: `Intenção '${intent}' não reconhecida.` };
                 success = false;
@@ -234,14 +286,16 @@ async function handleRegistrarDespesa(payload: any, uid: string) {
             throw new HttpsError('resource-exhausted', 'Limite de despesas atingido para seu plano atual.');
         }
 
-        const { data, tipo, valor, fornecedor } = payload;
+        const { data, tipo, valor, fornecedor, description, category } = payload;
         
         const expenseId = await createExpense({
             userId: uid,
             date: data,
             type: tipo,
             value: parseFloat(valor),
-            supplier: fornecedor
+            supplier: fornecedor,
+            description,
+            category
         });
 
         // Invalidar cache de despesas
@@ -255,6 +309,30 @@ async function handleRegistrarDespesa(payload: any, uid: string) {
     } catch (error: any) {
         logger.error('Erro ao registrar despesa:', error);
         throw error;
+    }
+}
+
+async function handleUpdateExpense(payload: any, uid: string) {
+    try {
+        const { expenseId, ...data } = payload;
+        await updateExpense(uid, expenseId, data);
+        await CacheManager.deleteExpenses(uid); // Invalidate cache
+        return { success: true, message: 'Despesa atualizada com sucesso!' };
+    } catch (error: any) {
+        logger.error('Erro ao atualizar despesa:', error);
+        throw new HttpsError('internal', 'Erro ao atualizar despesa', { error: error.message });
+    }
+}
+
+async function handleDeleteExpense(payload: any, uid: string) {
+    try {
+        const { expenseId } = payload;
+        await deleteExpense(uid, expenseId);
+        await CacheManager.deleteExpenses(uid); // Invalidate cache
+        return { success: true, message: 'Despesa excluída com sucesso!' };
+    } catch (error: any) {
+        logger.error('Erro ao excluir despesa:', error);
+        throw new HttpsError('internal', 'Erro ao excluir despesa', { error: error.message });
     }
 }
 
@@ -509,4 +587,55 @@ async function handleInvalidateCache(uid: string) {
         success: true,
         message: 'Cache do usuário invalidado com sucesso'
     };
+}
+
+// --- HANDLERS PARA ESTOQUE ---
+
+async function handleAddInventoryItem(payload: any, uid: string) {
+    try {
+        const { name, quantity, unit, lowStockThreshold } = payload;
+        const itemId = await addInventoryItem({
+            userId: uid,
+            name,
+            quantity: Number(quantity),
+            unit,
+            lowStockThreshold: Number(lowStockThreshold)
+        });
+        return { success: true, message: 'Item adicionado ao estoque com sucesso!', itemId };
+    } catch (error: any) {
+        logger.error('Erro ao adicionar item ao estoque:', error);
+        throw new HttpsError('internal', 'Erro ao adicionar item ao estoque', { error: error.message });
+    }
+}
+
+async function handleGetInventory(uid: string) {
+    try {
+        const inventory = await getInventory(uid);
+        return { success: true, inventory };
+    } catch (error: any) {
+        logger.error('Erro ao buscar estoque:', error);
+        throw new HttpsError('internal', 'Erro ao buscar estoque', { error: error.message });
+    }
+}
+
+async function handleUpdateInventoryItem(payload: any, uid: string) {
+    try {
+        const { itemId, ...data } = payload;
+        await updateInventoryItem(uid, itemId, data);
+        return { success: true, message: 'Item do estoque atualizado com sucesso!' };
+    } catch (error: any) {
+        logger.error('Erro ao atualizar item do estoque:', error);
+        throw new HttpsError('internal', 'Erro ao atualizar item do estoque', { error: error.message });
+    }
+}
+
+async function handleDeleteInventoryItem(payload: any, uid: string) {
+    try {
+        const { itemId } = payload;
+        await deleteInventoryItem(uid, itemId);
+        return { success: true, message: 'Item do estoque deletado com sucesso!' };
+    } catch (error: any) {
+        logger.error('Erro ao deletar item do estoque:', error);
+        throw new HttpsError('internal', 'Erro ao deletar item do estoque', { error: error.message });
+    }
 }
