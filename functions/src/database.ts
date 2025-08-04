@@ -20,6 +20,14 @@ export interface UserProfile {
     financeiro?: string;
     operacoes?: string;
   };
+  preferences?: {
+    language?: string;
+    timezone?: string;
+    notifications?: boolean;
+  };
+  subscriptionId?: string;
+  customerId?: string;
+  updatedAt?: Date;
 }
 
 export interface Expense {
