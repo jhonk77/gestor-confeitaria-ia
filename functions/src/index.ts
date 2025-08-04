@@ -98,7 +98,7 @@ const agenteSetup = {
         const { financeiroFile, operacoesFile } = payload;
 
         const folderResponse = await drive.files.create({
-            resource: { name: `Base de Dados - ${uid}`, mimeType: 'application/vnd.google-apps.folder' },
+            requestBody: { name: `Base de Dados - ${uid}`, mimeType: 'application/vnd.google-apps.folder' },
             fields: 'id',
         });
         const folderId = folderResponse.data.id!;
@@ -107,7 +107,7 @@ const agenteSetup = {
             const buffer = Buffer.from(fileData, 'base64');
             const fileMetadata = { name: fileName, parents: [folderId], mimeType: 'application/vnd.google-apps.spreadsheet' };
             const media = { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: Readable.from(buffer) };
-            const response = await drive.files.create({ resource: fileMetadata, media, fields: 'id' });
+            const response = await drive.files.create({ requestBody: fileMetadata, media, fields: 'id' });
             return response.data.id!;
         };
 
@@ -119,14 +119,14 @@ const agenteSetup = {
         const abasExistentesFinanceiro = spreadsheetFinanceiro.data.sheets?.map(s => s.properties?.title) || [];
         const requestsFinanceiro = ['CLIENTES', 'PEDIDOS_AGENDA'].filter(aba => !abasExistentesFinanceiro.includes(aba)).map(aba => ({ addSheet: { properties: { title: aba } } }));
         if (requestsFinanceiro.length > 0) {
-            await sheets.spreadsheets.batchUpdate({ spreadsheetId: financeiroId, resource: { requests: requestsFinanceiro } });
+            await sheets.spreadsheets.batchUpdate({ spreadsheetId: financeiroId, requestBody: { requests: requestsFinanceiro } });
         }
 
         const spreadsheetOperacoes = await sheets.spreadsheets.get({ spreadsheetId: operacoesId });
         const abasExistentesOperacoes = spreadsheetOperacoes.data.sheets?.map(s => s.properties?.title) || [];
         const requestsOperacoes = ['ESTOQUE'].filter(aba => !abasExistentesOperacoes.includes(aba)).map(aba => ({ addSheet: { properties: { title: aba } } }));
         if (requestsOperacoes.length > 0) {
-            await sheets.spreadsheets.batchUpdate({ spreadsheetId: operacoesId, resource: { requests: requestsOperacoes } });
+            await sheets.spreadsheets.batchUpdate({ spreadsheetId: operacoesId, requestBody: { requests: requestsOperacoes } });
         }
 
         return { success: true, message: 'Base de dados configurada!', spreadsheetIds: { financeiro: financeiroId, operacoes: operacoesId } };
@@ -138,7 +138,7 @@ const agenteFinanceiro = {
         const mes = getMesAtual();
         const linha = await getProximaLinhaVazia(spreadsheetId, `${mes}!T:T`);
         const range = `${mes}!T${linha}:W${linha}`;
-        await sheets.spreadsheets.values.update({ spreadsheetId, range, valueInputOption: 'USER_ENTERED', resource: { values: [[data, tipo, valor, fornecedor]] } });
+        await sheets.spreadsheets.values.update({ spreadsheetId, range, valueInputOption: 'USER_ENTERED', requestBody: { values: [[data, tipo, valor, fornecedor]] } });
         return { success: true, message: 'Despesa registada!' };
     }
 };
@@ -162,7 +162,7 @@ const agenteCRM = {
             spreadsheetId,
             range,
             valueInputOption: 'USER_ENTERED',
-            resource: { values: [[`PEDIDO-${linha}`, cliente, produtos, hoje, dataEntrega, status]] },
+            requestBody: { values: [[`PEDIDO-${linha}`, cliente, produtos, hoje, dataEntrega, status]] },
         });
         return { success: true, message: `Pedido para ${cliente} registado.` };
     }
@@ -170,10 +170,10 @@ const agenteCRM = {
 
 const agenteInclusao = {
     criarReceita: async ({ spreadsheetId, recipeName, ingredients }: any) => {
-        await sheets.spreadsheets.batchUpdate({ spreadsheetId, resource: { requests: [{ addSheet: { properties: { title: recipeName } } }] } });
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: [{ addSheet: { properties: { title: recipeName } } }] } });
         const header = [["INSUMO", "QUANTIDADE", "UNIDADE"]];
         const rows = ingredients.map((ing: any) => [ing.name, ing.quantity, ing.unit]);
-        await sheets.spreadsheets.values.update({ spreadsheetId, range: `${recipeName}!A1`, valueInputOption: 'USER_ENTERED', resource: { values: header.concat(rows) } });
+        await sheets.spreadsheets.values.update({ spreadsheetId, range: `${recipeName}!A1`, valueInputOption: 'USER_ENTERED', requestBody: { values: header.concat(rows) } });
         return { success: true, message: `Receita "${recipeName}" criada!` };
     }
 };
@@ -204,7 +204,7 @@ const agenteEstoque = {
                 spreadsheetId,
                 range: `ESTOQUE!C${itemIndex + 1}`,
                 valueInputOption: 'USER_ENTERED',
-                resource: { values: [[novoEstoque]] },
+                requestBody: { values: [[novoEstoque]] },
             });
         } else {
             console.warn(`Insumo "${item}" não encontrado no estoque para dar baixa.`);
@@ -222,7 +222,7 @@ const agenteAnalista = {
         
         const generativeModel = vertexAI.getGenerativeModel({ model: 'gemini-1.0-pro' });
         const result = await generativeModel.generateContent(prompt);
-        const analysisText = result.response.candidates[0].content.parts[0].text;
+        const analysisText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || 'Análise não disponível';
         
         return { success: true, message: 'Análise concluída.', analysis: analysisText };
     }

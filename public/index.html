@@ -41,7 +41,8 @@
             };
             firebase.initializeApp(firebaseConfig);
             const auth = firebase.auth();
-            const functions = firebase.functions('southamerica-east1');
+            const functions = firebase.functions();
+            functions.useEmulator('localhost', 5001);
             let spreadsheetIds = JSON.parse(localStorage.getItem('spreadsheetIds'));
             let currentUser = null;
             const appContainer = document.getElementById('app-container');
@@ -125,9 +126,131 @@
                 document.getElementById('menu-button').addEventListener('click', () => { document.getElementById('mobile-menu').classList.toggle('hidden'); });
             }
 
-            function buildNav() { /* ... Lógica para construir a navegação ... */ }
-            function renderPage(pageId) { /* ... Lógica para renderizar a página ... */ }
-            function showToast(message, bgColor) { /* ... Lógica do toast ... */ }
+            function buildNav() {
+                const navItems = [
+                    { id: 'chat', icon: 'fas fa-comments', label: 'Chat IA' },
+                    { id: 'financeiro', icon: 'fas fa-chart-line', label: 'Financeiro' },
+                    { id: 'producao', icon: 'fas fa-cogs', label: 'Produção' },
+                    { id: 'pedidos', icon: 'fas fa-shopping-cart', label: 'Pedidos' }
+                ];
+                
+                const nav = document.querySelector('nav');
+                navItems.forEach(item => {
+                    const navLink = document.createElement('button');
+                    navLink.className = 'nav-link w-full text-left p-3 rounded-lg hover:bg-gray-700 flex items-center';
+                    navLink.innerHTML = `<i class="${item.icon} mr-3"></i><span>${item.label}</span>`;
+                    navLink.addEventListener('click', () => renderPage(item.id));
+                    nav.appendChild(navLink);
+                });
+            }
+            
+            function renderPage(pageId) {
+                const container = document.getElementById('page-container');
+                document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+                
+                switch(pageId) {
+                    case 'chat':
+                        container.innerHTML = `
+                            <div class="max-w-4xl mx-auto">
+                                <h1 class="text-3xl font-bold mb-6">Assistente IA</h1>
+                                <div class="bg-white rounded-lg shadow-lg p-6">
+                                    <div id="chat-messages" class="h-96 overflow-y-auto mb-4 p-4 border rounded-lg bg-gray-50"></div>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="chat-input" placeholder="Digite sua pergunta..." class="flex-1 p-3 border rounded-lg">
+                                        <button id="send-btn" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">Enviar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        setupChatHandlers();
+                        break;
+                    case 'financeiro':
+                        container.innerHTML = `
+                            <div class="max-w-4xl mx-auto">
+                                <h1 class="text-3xl font-bold mb-6">Controle Financeiro</h1>
+                                <div class="bg-white rounded-lg shadow-lg p-6">
+                                    <form id="despesa-form" class="space-y-4">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <input type="date" id="data-despesa" class="p-3 border rounded-lg" required>
+                                            <select id="tipo-despesa" class="p-3 border rounded-lg" required>
+                                                <option value="">Tipo de Despesa</option>
+                                                <option value="Ingredientes">Ingredientes</option>
+                                                <option value="Embalagens">Embalagens</option>
+                                                <option value="Equipamentos">Equipamentos</option>
+                                                <option value="Outros">Outros</option>
+                                            </select>
+                                            <input type="number" id="valor-despesa" placeholder="Valor" class="p-3 border rounded-lg" step="0.01" required>
+                                            <input type="text" id="fornecedor-despesa" placeholder="Fornecedor" class="p-3 border rounded-lg" required>
+                                        </div>
+                                        <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700">Registrar Despesa</button>
+                                    </form>
+                                </div>
+                            </div>
+                        `;
+                        setupFinanceiroHandlers();
+                        break;
+                    default:
+                        container.innerHTML = `
+                            <div class="text-center py-20">
+                                <h2 class="text-2xl font-bold text-gray-600">Página em desenvolvimento</h2>
+                                <p class="text-gray-500 mt-2">Esta funcionalidade estará disponível em breve.</p>
+                            </div>
+                        `;
+                }
+            }
+            
+            function setupChatHandlers() {
+                const sendBtn = document.getElementById('send-btn');
+                const chatInput = document.getElementById('chat-input');
+                const chatMessages = document.getElementById('chat-messages');
+                
+                function sendMessage() {
+                    const message = chatInput.value.trim();
+                    if (!message) return;
+                    
+                    chatMessages.innerHTML += `<div class="mb-4"><div class="bg-blue-100 p-3 rounded-lg ml-auto max-w-xs"><strong>Você:</strong> ${message}</div></div>`;
+                    chatInput.value = '';
+                    
+                    callAgent('gerarAnalise', { query: message }).then(result => {
+                        chatMessages.innerHTML += `<div class="mb-4"><div class="bg-gray-100 p-3 rounded-lg mr-auto max-w-xs"><strong>IA:</strong> ${result.analysis || result.message}</div></div>`;
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    }).catch(error => {
+                        chatMessages.innerHTML += `<div class="mb-4"><div class="bg-red-100 p-3 rounded-lg mr-auto max-w-xs"><strong>Erro:</strong> ${error.message}</div></div>`;
+                    });
+                }
+                
+                sendBtn.addEventListener('click', sendMessage);
+                chatInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') sendMessage();
+                });
+            }
+            
+            function setupFinanceiroHandlers() {
+                const form = document.getElementById('despesa-form');
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const data = document.getElementById('data-despesa').value;
+                    const tipo = document.getElementById('tipo-despesa').value;
+                    const valor = document.getElementById('valor-despesa').value;
+                    const fornecedor = document.getElementById('fornecedor-despesa').value;
+                    
+                    try {
+                        await callAgent('registrarDespesa', { data, tipo, valor, fornecedor });
+                        form.reset();
+                    } catch (error) {
+                        console.error('Erro ao registrar despesa:', error);
+                    }
+                });
+            }
+            
+            function showToast(message, bgColor) {
+                const toast = document.getElementById('toast');
+                toast.textContent = message;
+                toast.className = `toast ${bgColor}`;
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            }
 
             renderApp();
         });
