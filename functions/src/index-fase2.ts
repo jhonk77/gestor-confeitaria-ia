@@ -153,7 +153,6 @@ export const assistenteHttp = onCall({ region: 'southamerica-east1' }, async (re
 // --- AGENTES ESPECIALISTAS OTIMIZADOS COM CACHE ---
 
 const agenteHealthCheck = {
-    @MonitorPerformance('healthCheck')
     async verificar() {
         const cacheStats = CacheManager.getCacheStats();
         return { 
@@ -168,7 +167,6 @@ const agenteHealthCheck = {
 };
 
 const agenteSetup = {
-    @MonitorPerformance('setupUser')
     async configurarUsuario(payload: any, uid: string) {
         try {
             // Verificar cache primeiro
@@ -216,7 +214,6 @@ const agenteSetup = {
 };
 
 const agenteFinanceiro = {
-    @MonitorPerformance('registrarDespesa')
     async registrarDespesa(payload: any, uid: string) {
         try {
             // Verificar limites do plano
@@ -247,9 +244,8 @@ const agenteFinanceiro = {
             logger.error('Erro ao registrar despesa:', error);
             throw error;
         }
-    },
+    }
 
-    @MonitorPerformance('listarDespesas')
     async listarDespesas(payload: any, uid: string) {
         try {
             const { limit = 50 } = payload;
