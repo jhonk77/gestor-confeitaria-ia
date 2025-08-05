@@ -2,15 +2,16 @@
   "name": "functions",
   "description": "Backend com agentes de IA para o Gestor de Confeitaria",
   "main": "index.js",
-  "dependencies": {
-    "@google-cloud/vertexai": "^1.1.0",
-    "@google-cloud/vision": "^4.3.0",
-    "firebase-admin": "^12.0.0",
-    "firebase-functions": "^6.4.0",
-    "googleapis": "^134.0.0"
-  },
   "engines": {
     "node": "22"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@google-cloud/vertexai": "^1.10.0",
+    "@google-cloud/vision": "^5.3.2",
+    "@types/node": "^24.1.0",
+    "firebase-admin": "^13.4.0",
+    "firebase-functions": "^6.4.0",
+    "googleapis": "^154.1.0"
+  }
 }
